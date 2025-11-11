@@ -4,6 +4,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView # pip install PyQtWebEngine
 from PyQt5.QtWidgets import QSizePolicy
 from view.tab_widget_base import TabWidgetBase
 import re
+import pandas as pd
 
 class Map(QWebEngineView, TabWidgetBase):
     def __init__(self, 
@@ -84,34 +85,36 @@ class Map(QWebEngineView, TabWidgetBase):
         self.__map.save(data, close_file=False)
         self.setHtml(data.getvalue().decode())
 
-    def addMarker(self, row, parent, label, columns):
-        popup = self.createPopup(row, label)
-        
-        average = 0
-        lenth = 0
-        for col in columns:
-            value = row.get(col, None)
-            if value:
-                average += value
-                lenth += 1
-        if lenth != 0:
-            average = average / lenth
+    def addMarker(self, row, parent, label, columns): 
+        if not pd.isna(row['lat']) and not pd.isna(row['long']):
+            popup = self.createPopup(row, label)
+            
+            average = 0
+            lenth = 0
+            for col in columns:
+                value = row.get(col, None)
+                if value:
+                    average += value
+                    lenth += 1
+            if lenth != 0:
+                average = average / lenth
 
-        c = '#43d9de'
-        if average > 35.4:
-            c = '#ff0000'
-        elif average < 12.0:
-            c = '#70ff00'
-        folium.CircleMarker(
-            [row["lat"], row["long"]],
-            fill_color = c, color = c ,
-            radius=8, fill_opacity=0.7,
-            popup=popup,
-            lazy=True
-            ).add_to(parent)
+            c = '#43d9de'
+            if average > 35.4:
+                c = '#ff0000'
+            elif average < 12.0:
+                c = '#70ff00'
+            folium.CircleMarker(
+                [row["lat"], row["long"]],
+                fill_color = c, color = c ,
+                radius=8, fill_opacity=0.7,
+                popup=popup,
+                lazy=True
+                ).add_to(parent)
        
     def addMarkers(self, df, parent, label, columns):
-        df.apply(self.addMarker,axis=1,args=([parent, label, columns]))
+        if 'lat' in df.columns and 'long' in df.columns:
+            df.apply(self.addMarker,axis=1,args=([parent, label, columns]))
 
     def createPopup(self, row, label):
         html = f"""

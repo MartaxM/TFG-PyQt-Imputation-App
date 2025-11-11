@@ -34,7 +34,7 @@ class DatasetList(QObject):
     
     @property
     def alwaysVisibleVariables(self):
-        return self.__variables
+        return self.__alwaysVisibleVariables
 
     @property
     def datasets(self):
@@ -145,15 +145,18 @@ class DatasetList(QObject):
             labels (array<str>): Dataset list to export
             file (str): Filename
         """
-        if len(labels) > 1:
-            counter = 1
-            for label in labels:
-                name, ext = os.path.splitext(file)
-                newFile = f"{name}({counter}){ext}"
-                self.__datasets[label].to_csv(newFile, index=False, parse_dates = ["time"])
-                counter+=1
-        else:
-            self.__datasets[label[0]].to_csv(file, index=False)
+        if labels and file:
+            name, ext = os.path.splitext(file)
+            ext = ".csv"
+            if len(labels) > 1:
+                counter = 1
+                for label in labels:
+                    newFile = f"{name}({counter}){ext}"
+                    self.__datasets[label].to_csv(newFile, index=False)
+                    counter+=1
+            elif len(labels) == 1:
+                newFile = f"{name}{ext}"
+                self.__datasets[labels[0]].to_csv(newFile, index=False)
     
     def saveFuseToCSV(self, labels, file):
         """
@@ -163,13 +166,17 @@ class DatasetList(QObject):
             labels (array<str>): Dataset list to export
             file (str): Filename
         """
-        frames = []
-        for label in labels:
-            frames.append(self.__datasets[label])
-        combined = pd.concat(frames)
-        combined= combined.drop_duplicates()
-        combined = combined.reset_index(drop=True)
-        combined.to_csv(file,index=False)
+        if labels and file:
+            name, ext = os.path.splitext(file)
+            ext = ".csv"
+            newFile = f"{name}{ext}"
+            frames = []
+            for label in labels:
+                frames.append(self.__datasets[label])
+            combined = pd.concat(frames)
+            combined= combined.drop_duplicates()
+            combined = combined.reset_index(drop=True)
+            combined.to_csv(newFile,index=False)
 
     def loadFromCSV(self, file):
         """
