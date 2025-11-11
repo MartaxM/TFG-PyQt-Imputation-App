@@ -7,7 +7,7 @@ import pickle
 class PyPotsSaits(Imputation):
 
     def impute(self, df, column, args = None):
-        filename = "./saved_models/SAITS_"
+        filename = "SAITS_"
         if args:
             filename = filename + args['label']
         filename = filename + "_"+ column + "_model.sav"

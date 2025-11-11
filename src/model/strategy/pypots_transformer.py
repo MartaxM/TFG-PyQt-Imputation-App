@@ -8,7 +8,7 @@ import pickle
 class PyPotsTransformer(Imputation):
 
     def impute(self, df, column, args = None):
-        filename = "./saved_models/TRANSFORMER_"
+        filename = "TRANSFORMER_"
         if args:
             filename = filename + args['label']
         filename = filename + "_"+ column + "_model.sav"
