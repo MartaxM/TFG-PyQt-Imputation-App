@@ -15,11 +15,11 @@ from view.analysis_tab import AnalysisTab
 
 class DatasetControler:
     def __init__(self, model, view, datasetPanel, imputePanel, tabWidget):
-        self.model = model
-        self.view = view
-        self.datasetPanel = datasetPanel
-        self.imputePanel = imputePanel
-        self.tabWidget = tabWidget
+        self.__model = model
+        self.__view = view
+        self.__datasetPanel = datasetPanel
+        self.__imputePanel = imputePanel
+        self.__tabWidget = tabWidget
         self.addTab("Plot")
         self.initConnections()
         self.listenToModel()
@@ -27,34 +27,34 @@ class DatasetControler:
 
     def initConnections(self):
         """Connect signals from view to corresponding actions"""
-        self.view.openImportDialog.connect(self.openFileDialog)
-        self.view.openExportDialog.connect(self.openExportFileDialog)
-        self.view.addTabSignal.connect(self.addTab)
-        self.datasetPanel.datasetRemoved.connect(self.handleDatasetRemoval)
-        self.datasetPanel.removeData.connect(self.openRemoveDialog)
-        self.datasetPanel.dsList.itemSelectionChanged.connect(self.handleSelectionChange)
-        self.datasetPanel.visibilityChanged.connect(self.handleDSVisibilityChange)
-        self.datasetPanel.duplicateDataset.connect(self.model.duplicateDataset)
-        self.datasetPanel.correctDataset.connect(self.openCorrectionDialog)
-        self.datasetPanel.renameDataset.connect(self.model.renameDataset)
-        self.imputePanel.imputeMethodChanged.connect(self.handleImputationChange)
-        self.imputePanel.visibilityChanged.connect(self.handleVisibilityChange)
-        self.imputePanel.saveBtn.clicked.connect(self.model.convertCurrent)
-        self.tabWidget.tabCloseRequested.connect(self.closeTab)
-        self.tabWidget.tabRenamed.connect(self.model.renameTab)
-        #self.tabWidget.currentChanged.connect(self.model.changeTab)
+        self.__view.openImportDialog.connect(self.openFileDialog)
+        self.__view.openExportDialog.connect(self.openExportFileDialog)
+        self.__view.addTabSignal.connect(self.addTab)
+        self.__datasetPanel.datasetRemoved.connect(self.handleDatasetRemoval)
+        self.__datasetPanel.removeData.connect(self.openRemoveDialog)
+        self.__datasetPanel.dsList.itemSelectionChanged.connect(self.handleSelectionChange)
+        self.__datasetPanel.datasetVisibilityChanged.connect(self.handleDSVisibilityChange)
+        self.__datasetPanel.duplicateDataset.connect(self.__model.duplicateDataset)
+        self.__datasetPanel.correctDataset.connect(self.openCorrectionDialog)
+        self.__datasetPanel.renameDataset.connect(self.__model.renameDataset)
+        self.__imputePanel.imputeMethodChanged.connect(self.handleImputationChange)
+        self.__imputePanel.imputeVisibilityChanged.connect(self.handleVisibilityChange)
+        self.__imputePanel.saveBtn.clicked.connect(self.__model.convertCurrent)
+        self.__tabWidget.tabCloseRequested.connect(self.closeTab)
+        self.__tabWidget.tabRenamed.connect(self.__model.renameTab)
+        self.__tabWidget.currentChanged.connect(self.__model.changeTab)
 
     def listenToModel(self):
         """Subscribe to model"""
-        self.model.datasetAdded.connect(self.datasetPanel.addItem)
-        self.model.datasetAddedToVisible.connect(self.addDFtoView)
-        self.model.datasetRemoved.connect(self.removeDataset)
-        self.model.datasetChanged.connect(self.addDFtoView)
-        self.model.datasetRenamed.connect(self.datasetRenamed)
-        self.model.currentTabChanged.connect(self.updateMenu)
-        self.model.imputationChanged.connect(self.updateImputation)
-        self.model.imputationVisible.connect(self.updateImputationVisibility)
-        self.model.resultUpdated.connect(self.updateResult)
+        self.__model.datasetAdded.connect(self.__datasetPanel.addItem)
+        self.__model.datasetVisilityChanged.connect(self.changeDatasetVisibility)
+        self.__model.datasetRemoved.connect(self.removeDataset)
+        self.__model.datasetRenamed.connect(self.datasetRenamed)
+        self.__model.clearResult.connect(self.removeResult)
+        self.__model.currentTabChanged.connect(self.updateMenu)
+        self.__model.imputationChanged.connect(self.updateImputation)
+        self.__model.imputationVisible.connect(self.updateImputationVisibility)
+        self.__model.resultUpdated.connect(self.updateResult)
 
     def datasetRenamed(self, oldLabel, renamePairs):
         """
@@ -64,21 +64,25 @@ class DatasetControler:
             oldLabel (str): Old dataset label.
             renamePairs (str): New dataset label.
         """
-        self.datasetPanel.renameItem(oldLabel, renamePairs[oldLabel])
-        if(self.model.currentTab.type == 'Map'):
-            df = {}
-            for old, new in renamePairs.items():
-                dataset = self.model.getVarResult(new)
-                df.update({old : dataset})
-            self.tabWidget.currentWidget().renameLayers(renamePairs, df)
-        else:
-            self.tabWidget.currentWidget().renameLayers(renamePairs)
+        self.__datasetPanel.renameItem(oldLabel, renamePairs[oldLabel])
+        df = {}
+        for old, new in renamePairs.items():
+            dataset = self.__model.getDataset(new)
+            df.update({old : dataset})
+
+        args = {
+            'df' : df,
+            'columns' : self.__model.variables
+        }
+
+        for i in range(self.__tabWidget.count()):
+            self.__tabWidget.widget(i).renameLayers(renamePairs, args = args)
         return
 
     def updateResult(self):
         """Update view to match results."""
-        result = self.model.getResults()
-        self.tabWidget.currentWidget().updateViewResult(result)
+        result = self.__model.getResults()
+        self.__tabWidget.currentWidget().updateViewResult(result)
     
     def updateImputation(self, var):
         """
@@ -87,9 +91,9 @@ class DatasetControler:
         Args:
             var (str): Corresponding variable.
         """
-        result = self.model.getVarResult(var)
-        if result:
-            self.tabWidget.currentWidget().updateViewResult({var:result})
+        result = self.__model.getVarResult(var)
+        if not result is None:
+            self.__tabWidget.currentWidget().updateViewResult({var:result})
     
     def updateImputationVisibility(self, var, visible):
         """
@@ -99,11 +103,11 @@ class DatasetControler:
             var (str): Corresponding variable.
             visible (bool): Visibility value.
         """
-        result = self.model.getVarResult(var)
-        if visible and not result.empty:
-            self.tabWidget.currentWidget().updateViewResult({var:result})
+        result = self.__model.getVarResult(var)
+        if visible and not result is None:
+            self.__tabWidget.currentWidget().updateViewResult({var:result})
         else:
-            self.tabWidget.currentWidget().removeLayer(var)
+            self.__tabWidget.currentWidget().removeLayer(var)
 
     def updateMenu(self,index):
         """
@@ -112,16 +116,24 @@ class DatasetControler:
         Args:
             index (int): Tab index
         """
-        self.tabWidget.setCurrentIndex(index)
-        tabInfo = self.model.currentTab
-        visible = tabInfo.visible
-        current = tabInfo.selection
-        if tabInfo.type == 'AnalysisTab':
-            self.datasetPanel.setState(visible, current, True)
-            self.imputePanel.setVisible(False)
+        if index < 0:
+            self.__imputePanel.hide()
+            self.__datasetPanel.setMaxSelection(0)
+            self.__datasetPanel.setVisibilityControllable(False)
         else:
-            self.datasetPanel.setState(visible, current, False)
-            self.imputePanel.setVisible(True)
+            self.__tabWidget.setCurrentIndex(index)
+            tabInfo = self.__model.currentTab
+            visible = tabInfo.visible
+            current = tabInfo.selection
+            visibleImputation = tabInfo.getVisibleImputationVariables()
+            self.__datasetPanel.show()
+            if tabInfo.type == 'AnalysisTab':
+                self.__datasetPanel.setState(visible, current, False, 2)
+                self.__imputePanel.hide()
+            else:
+                self.__datasetPanel.setState(visible, current, True, 1)
+                self.__imputePanel.show()
+                self.__imputePanel.setState(visibleImputation)
 
     def closeTab(self, index):
         """
@@ -130,8 +142,8 @@ class DatasetControler:
         Args:
             index (int): Tab index.
         """
-        self.tabWidget.removeTab(index)
-        self.model.removeTab(index)
+        self.__tabWidget.removeTab(index)
+        self.__model.removeTab(index)
 
     def addTab(self, label):
         tab = Plot()
@@ -139,60 +151,65 @@ class DatasetControler:
             tab = AnalysisTab()
         elif label == "Map":
             tab = Map()
-        self.tabWidget.addTab(tab, label)
+        self.__tabWidget.addTab(tab, label)
         if label == "Analysis":
-            self.model.addTab( label, tab.__class__.__name__, 2)
+            self.__model.addTab( label, tab.__class__.__name__, 2)
         else:
-            self.model.addTab( label, tab.__class__.__name__)
+            self.__model.addTab( label, tab.__class__.__name__)
+        
         return
 
     def handleImputationChange(self, label, selection):
-        self.model.changeImputationSelection(label, selection)
+        self.__model.changeImputationSelection(label, selection)
 
     def handleVisibilityChange(self, label, checked):
-        self.model.changeImputationVisiblity(label, checked)
+        self.__model.changeImputationVisiblity(label, checked)
 
     def handleDSVisibilityChange(self, label, checked):
-        self.model.changeDatasetVisiblity(label, checked)
+        self.__model.changeDatasetVisiblity(label, checked)
 
     def handleSelectionChange(self):
         """Handle selected dataset change"""
-        if type(self.tabWidget) is AnalysisTab:
-            selection = self.datasetPanel.selectedItems()
+        if self.__model.currentTab.type == 'AnalysisTab':
+            selection = self.__datasetPanel.selectedItems()
             labels = []
             for item in selection:
-                label = item.label.text()
+                label = item.label
                 labels.append(label)
-                self.model.setCurrent(labels)
+                self.__model.setCurrent(labels)
         else:
-            widget = self.datasetPanel.currentItem()
+            widget = self.__datasetPanel.currentItem()
             if(widget):
-                labelText = widget.label.text()
-                self.model.setCurrent(labelText)
-                self.imputePanel.setVisible(True)
-            else:
-                self.imputePanel.setVisible(False)
+                labelText = widget.label
+                self.__model.setCurrent(labelText)
 
     def getImputationMethods(self):
-        imputationMethods = list(self.model.imputationMethods.keys())
-        self.imputePanel.createImputationItems(imputationMethods)
+        imputationMethods = list(self.__model.imputationMethods.keys())
+        self.__imputePanel.createImputationItems(self.__model.variables, self.__model.alwaysVisibleVariables, imputationMethods)
 
-    def removeDataset(self, label):
-        self.tabWidget.currentWidget().removeLayer(label)
+    def removeResult(self, label):
+        self.__tabWidget.currentWidget().removeLayer(label)
+
+    def removeDataset(self, label, columns):
+        for i in range(self.__tabWidget.count()):
+            self.__tabWidget.currentWidget().removeLayer(label, columns)
 
     def handleDatasetRemoval(self,label, listItem = None):
-        if self.model.removeDataset(label):
-            self.datasetPanel.takeItem(listItem)
+        if self.__model.removeDataset(label):
+            self.__datasetPanel.takeItem(listItem)
 
-    def addDFtoView(self, label):
-        visible = self.model.currentTab.visible
-        if label in visible:
-            df = self.model.datasets[label]
-            self.tabWidget.currentWidget().addLayer(label, df, 'SDS_P1')
+    def changeDatasetVisibility(self, label, visiblityStatus):
+        df = self.__model.getDataset(label)
+        if not df is None:
+            columns = set(self.__model.variables).intersection(df.columns)
+            if visiblityStatus:
+                self.__tabWidget.currentWidget().addLayer(label, df, columns)
+            else:
+                self.__tabWidget.currentWidget().removeLayer(label, columns)
 
     def openFileDialog(self):
         """Open file import dialog and load selected files into model"""
-        file_dialog = QFileDialog(self.view)
+        file_dialog = QFileDialog(self.__view)
         file_dialog.setWindowTitle("Open File")
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
         file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
@@ -206,20 +223,19 @@ class DatasetControler:
                     selection = importDialog.getSelection()
                     if selection['multiple'] == True:
                         for file in selected_files:
-                            self.model.loadFromCSV(file)
+                            self.__model.loadFromCSV(file)
                     else:
-                        self.model.loadFuseFromCSVs(selected_files)
+                        self.__model.loadFuseFromCSVs(selected_files)
             else:
-                self.model.loadFromCSV(selected_files[0])
+                self.__model.loadFromCSV(selected_files[0])
     
     def openExportFileDialog(self):
         """Open export file dialog and export as cvs files selected datasets"""
-        dialog = ExportDialog(self.model.datasets)
+        dialog = ExportDialog(self.__model.datasets)
 
         if dialog.exec() == QDialog.Accepted:
             selectedDatasets, selectedOption = dialog.getSelection()
-            filter = "csv(*.csv)"
-            file_dialog = QFileDialog(self.view)
+            file_dialog = QFileDialog(self.__view)
             file_dialog.setWindowTitle("Save to File")
             file_dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
             file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
@@ -227,23 +243,22 @@ class DatasetControler:
             if file_dialog.exec():
                 selected_file = file_dialog.selectedFiles()[0]
                 if selectedOption == 'One':
-                    self.model.saveFuseToCSV(selectedDatasets, selected_file)
+                    self.__model.saveFuseToCSV(selectedDatasets, selected_file)
                 else:
-                    self.model.saveToCSV(selectedDatasets, selected_file)
-                #print("Estamos guardando")
-
+                    self.__model.saveToCSV(selectedDatasets, selected_file)
+                    
     def openRemoveDialog(self, label):
-        removeDialog = RemoveDialog(self.model.datasets[label])
+        removeDialog = RemoveDialog(self.__model.datasets[label])
         if removeDialog.exec() ==  QDialog.Accepted:
             selection = removeDialog.getSelection()
             if selection['mode'] == 'percent':
-                self.model.removePercent(label, selection['value'])
+                self.__model.removePercent(label, selection['value'])
             elif selection['mode'] == 'interval':
-                self.model.removeInterval(label, selection['inverted'],selection['start'], selection['end'])
+                self.__model.removeInterval(label, selection['inverted'],selection['start'], selection['end'])
 
     def openCorrectionDialog(self, label):
         correctionDialog = CorrectionDialog()
         if correctionDialog.exec() == QDialog.Accepted:
             substract, division = correctionDialog.getOperands()
             if substract and division:
-                self.model.applyCorrection(label,substract,division)
+                self.__model.applyCorrection(label,substract,division)

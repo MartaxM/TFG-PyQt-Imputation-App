@@ -6,6 +6,10 @@ from src.view.renamable_tab_widget import RenamableTabWidget
 from src.view.dataset_panel import DatasetPanel
 from src.view.impute_panel import ImputePanel
 from src.control.dataset_controller import DatasetControler
+from src.model.strategy.average import Average
+from src.model.strategy.backward_fill import BackwardFill
+from src.model.strategy.forward_fill import ForwardFill
+from src.model.strategy.median import Median
 
 import sys
 
@@ -15,8 +19,14 @@ if app is None:
 
 @pytest.fixture
 def full_controller(qtbot):
+    methods = {
+        'Average' : Average(), 
+        'Backward Fill' : BackwardFill(), 
+        'Forward Fill' : ForwardFill(), 
+        'Median' : Median(),
+    }
     """Creates the real MVC setup."""
-    model = DatasetList()
+    model = DatasetList(methods)
     ds_panel = DatasetPanel()
     im_panel = ImputePanel()
     tab_widget = RenamableTabWidget()
@@ -42,7 +52,6 @@ def test_startup_creates_initial_tab(full_controller):
     ctrl, model, view, ds_panel, im_panel, tab_widget = full_controller
     # Observable: controller should have created one tab at init
     assert tab_widget.count() >= 1
-    assert isinstance(model, DatasetList)
 
 
 def test_add_tab_and_dataset_signal(qtbot, full_controller):
@@ -54,7 +63,7 @@ def test_add_tab_and_dataset_signal(qtbot, full_controller):
 
     # Add a dummy DataFrame to the model and emit datasetAdded
     import pandas as pd
-    df = pd.DataFrame({"SDS_P1": [1, 2], "SDS_P2": [3, 4]})
+    df = pd.DataFrame({"SDS_P1": [1, 2], "SDS_P2": [3, 4], "lat":[5,6], "long":[7,8]})
     model.addDataset("Example", df)
 
     # Observable: panel should now list one dataset
@@ -67,13 +76,13 @@ def test_dataset_removal_flow(qtbot, full_controller):
 
     # Add dataset
     import pandas as pd
-    df = pd.DataFrame({"SDS_P1": [1], "SDS_P2": [2]})
+    df = pd.DataFrame({"SDS_P1": [1], "SDS_P2": [2], "lat":[3], "long":[4]})
     model.addDataset("to_delete", df)
     qtbot.waitUntil(lambda: ds_panel.dsList.count() == 1)
 
     # Trigger datasetRemoved signal from panel
     item = ds_panel.dsList.item(0)
-    label = ds_panel.dsList.itemWidget(item).label.text()
+    label = ds_panel.dsList.itemWidget(item).label
 
     with qtbot.waitSignal(model.datasetRemoved, timeout=2000):
         ds_panel.datasetRemoved.emit(label, 0)
@@ -86,19 +95,10 @@ def test_update_imputation_flow(qtbot, full_controller):
     ctrl, model, view, ds_panel, im_panel, tab_widget = full_controller
 
     # Simulate imputation method change
-    im_panel.createImputationItems(model.imputationMethods)
+    im_panel.createImputationItems(model.variables, model.alwaysVisibleVariables, model.imputationMethods)
     im_panel.imputeMethodChanged.emit("SDS_P1", "Median")
+    im_panel.imputeVisibilityChanged.emit("SDS_P1", True)
 
     # Wait for model to register selection
     qtbot.wait(100)
-    assert model.imputationSelection["SDS_P1"]["selection"] == "Median"
-
-
-def test_close_tab_and_reopen(qtbot, full_controller):
-    ctrl, model, view, ds_panel, im_panel, tab_widget = full_controller
-
-    initial_count = tab_widget.count()
-    ctrl.closeTab(0)
-    qtbot.wait(100)
-    ctrl.addTab("Plot")
-    assert tab_widget.count() >= initial_count
+    assert model.currentTab.getImputationSelection("SDS_P1") == "Median"

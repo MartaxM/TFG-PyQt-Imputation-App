@@ -5,7 +5,7 @@ from PyQt5.QtGui import QCursor
 class DatasetListItem(QWidget):
     visibilityChangedSignal = pyqtSignal(str,bool)
 
-    def __init__ (self, lb, deleteCallback, removeSignal, duplicateSignal, correctionSignal, renameSignal,visible = False):
+    def __init__ (self, lb, deleteCallback, removeSignal, duplicateSignal, correctionSignal, renameSignal,visible = False, toggleable = True):
         super().__init__()
         self.layout = QHBoxLayout()
         style = """
@@ -24,31 +24,33 @@ class DatasetListItem(QWidget):
         self.renameSignal = renameSignal
 
         # Widgets
-        self.label = QLabel(lb)
-        self.visibleToggle = QPushButton(self)
-        self.visibleToggle.setCheckable(True)
-        self.visibleToggle.setChecked(visible)
-        self.visibleToggle.setFixedWidth(30)
-        self.visibleToggle.setFlat(True)
-        visibleIcon = self.visibleToggle.style().standardIcon(QStyle.SP_DialogCancelButton)
-        self.visibleToggle.setIcon(visibleIcon)
-        self.visibleToggle.setStyleSheet(style)
+        self.__label = QLabel(lb)
+        self.__visibleToggle = QPushButton(self)
+        self.__visibleToggle.setCheckable(True)
+        self.__visibleToggle.setChecked(visible)
+        self.__visibleToggle.setFixedWidth(30)
+        self.__visibleToggle.setFlat(True)
+        visibleIcon = self.__visibleToggle.style().standardIcon(QStyle.SP_DialogCancelButton)
+        self.__visibleToggle.setIcon(visibleIcon)
+        self.__visibleToggle.setStyleSheet(style)
+        if not toggleable:
+            self.__visibleToggle.hide()
 
-        self.optionsBtn = QPushButton(self)
-        optionsIcon = self.optionsBtn.style().standardIcon(QStyle.SP_ToolBarVerticalExtensionButton)
-        self.optionsBtn.setFlat(True)
-        self.optionsBtn.setIcon(optionsIcon)
-        self.optionsBtn.setFixedWidth(30)
-        self.optionsBtn.setStyleSheet(style)
+        self.__optionsBtn = QPushButton(self)
+        optionsIcon = self.__optionsBtn.style().standardIcon(QStyle.SP_ToolBarVerticalExtensionButton)
+        self.__optionsBtn.setFlat(True)
+        self.__optionsBtn.setIcon(optionsIcon)
+        self.__optionsBtn.setFixedWidth(30)
+        self.__optionsBtn.setStyleSheet(style)
         
         # Layout
-        self.layout.addWidget(self.visibleToggle)
-        self.layout.addWidget(self.label)
-        self.layout.addWidget(self.optionsBtn)
+        self.layout.addWidget(self.__visibleToggle)
+        self.layout.addWidget(self.__label)
+        self.layout.addWidget(self.__optionsBtn)
         
         self.setLayout(self.layout)
-        self.visibleToggle.toggled.connect(self.handleVisibilityChanged)
-        self.optionsBtn.clicked.connect(self._openMenu)
+        self.__visibleToggle.toggled.connect(self.__handleVisibilityChanged)
+        self.__optionsBtn.clicked.connect(self._openMenu)
 
         # Renaming set up
         self.lineEdit = QLineEdit(self)
@@ -58,6 +60,10 @@ class DatasetListItem(QWidget):
         self.installEventFilter(self)
         QApplication.instance().installEventFilter(self)
 
+    @property
+    def label(self):
+        return self.__label.text()
+
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
             self._openMenu()
@@ -65,16 +71,16 @@ class DatasetListItem(QWidget):
         super().mousePressEvent(event)
 
     def _openMenu(self):
-        menu = QMenu(self.optionsBtn)
-        duplicateAction = QAction("&Duplicate", self.optionsBtn)
-        duplicateAction.triggered.connect(self._triggerDuplicateSignal)
-        removeAction = QAction("&Remove data", self.optionsBtn)
-        removeAction.triggered.connect(self._triggerRemoveSignal)
-        applyCorrectionAction = QAction("&Apply correction", self.optionsBtn)
-        applyCorrectionAction.triggered.connect(self._triggerCorrectionSignal)
-        renameAction = QAction("&Rename", self.optionsBtn)
+        menu = QMenu(self.__optionsBtn)
+        duplicateAction = QAction("&Duplicate", self.__optionsBtn)
+        duplicateAction.triggered.connect(self.__triggerDuplicateSignal)
+        removeAction = QAction("&Remove data", self.__optionsBtn)
+        removeAction.triggered.connect(self.__triggerRemoveSignal)
+        applyCorrectionAction = QAction("&Apply correction", self.__optionsBtn)
+        applyCorrectionAction.triggered.connect(self.__triggerCorrectionSignal)
+        renameAction = QAction("&Rename", self.__optionsBtn)
         renameAction.triggered.connect(self.startRenaming)
-        deleteAction = QAction("&Delete", self.optionsBtn)
+        deleteAction = QAction("&Delete", self.__optionsBtn)
         deleteAction.triggered.connect(self.deleteCallback)
 
         menu.addAction(removeAction)
@@ -84,26 +90,26 @@ class DatasetListItem(QWidget):
         menu.addAction(deleteAction)
         menu.exec(QCursor.pos())
 
-    def _triggerRemoveSignal(self):
-        self.removeSignal.emit(self.label.text())
+    def __triggerRemoveSignal(self):
+        self.removeSignal.emit(self.__label.text())
     
-    def _triggerDuplicateSignal(self):
-        self.duplicateSignal.emit(self.label.text())
+    def __triggerDuplicateSignal(self):
+        self.duplicateSignal.emit(self.__label.text())
 
-    def _triggerCorrectionSignal(self):
-        self.correctionSignal.emit(self.label.text())
+    def __triggerCorrectionSignal(self):
+        self.correctionSignal.emit(self.__label.text())
 
-    def handleVisibilityChanged(self, checked):
+    def __handleVisibilityChanged(self, checked):
         if checked:
-            self.visibleToggle.setIcon(self.visibleToggle.style().standardIcon(QStyle.SP_DialogYesButton))
+            self.__visibleToggle.setIcon(self.__visibleToggle.style().standardIcon(QStyle.SP_DialogYesButton))
         else:
-            self.visibleToggle.setIcon(self.visibleToggle.style().standardIcon(QStyle.SP_DialogCancelButton))
+            self.__visibleToggle.setIcon(self.__visibleToggle.style().standardIcon(QStyle.SP_DialogCancelButton))
     
-        label = self.label.text()
+        label = self.__label.text()
         self.visibilityChangedSignal.emit(label, checked)
 
     def eventFilter(self, obj, event):
-        if obj == self.label and event.type() == event.MouseButtonDblClick:
+        if obj == self.__label and event.type() == event.MouseButtonDblClick:
             self.startRenaming()
             return True
         
@@ -116,10 +122,10 @@ class DatasetListItem(QWidget):
         return super().eventFilter(obj, event)
 
     def startRenaming(self):
-        rect = self.label.rect()
-        self.lineEdit.setText(self.label.text())
-        self.lineEdit.setGeometry(self.label.mapToGlobal(rect.topLeft()).x(),
-                                    self.label.mapToGlobal(rect.topLeft()).y(),
+        rect = self.__label.rect()
+        self.lineEdit.setText(self.__label.text())
+        self.lineEdit.setGeometry(self.__label.mapToGlobal(rect.topLeft()).x(),
+                                    self.__label.mapToGlobal(rect.topLeft()).y(),
                                     rect.width(), rect.height())
         self.lineEdit.setVisible(True)
         self.lineEdit.setFocus()
@@ -130,7 +136,7 @@ class DatasetListItem(QWidget):
             return
         self.lineEdit.setModified(False)
         newName = self.lineEdit.text().strip()
-        oldName = self.label.text()
+        oldName = self.__label.text()
         if newName and newName != oldName:
             self.renameSignal.emit(oldName,newName)
         self.lineEdit.setVisible(False)
@@ -139,4 +145,14 @@ class DatasetListItem(QWidget):
         self.lineEdit.setVisible(False)
     
     def rename(self, newName):
-        self.label.setText(newName)
+        self.__label.setText(newName)
+
+    def visibilityControllable(self, status):
+        if status:
+            self.__visibleToggle.show()
+        else: 
+            self.__visibleToggle.hide()
+
+    def setVisibilityStatus(self, status):
+        self.__visibleToggle.setChecked(status)
+        #self.__handleVisibilityChanged(status)

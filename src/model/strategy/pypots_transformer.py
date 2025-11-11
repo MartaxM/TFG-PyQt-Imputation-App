@@ -2,17 +2,20 @@ from model.strategy.imputation import Imputation
 import numpy as np
 import pandas as pd
 from pypots.imputation import Transformer
-from pathlib import Path
 import os
 import pickle
 
 class PyPotsTransformer(Imputation):
 
-    def impute(self, df, column):
-        filename = "./model/transformer_model.sav"
-        featureCols = ["SDS_P1", "SDS_P2", "BME280_temperature", "BME280_pressure", "BME280_humidity", "lat", "long"]
-        dfFeatures = df[featureCols].copy()
-        dataArray = dfFeatures.to_numpy()
+    def impute(self, df, column, args = None):
+        filename = "./saved_models/TRANSFORMER_"
+        if args:
+            filename = filename + args['label']
+        filename = filename + "_"+ column + "_model.sav"
+        
+        dfFeatures = df.select_dtypes(include=[np.number]).copy()
+        featureCols = list(dfFeatures.columns.values)
+        dataArray = dfFeatures.to_numpy(dtype=np.float32)
 
         seqLen = 10
         X, indices = self.createSequencesWithIndices(dataArray, seqLen)
@@ -21,7 +24,6 @@ class PyPotsTransformer(Imputation):
         if os.path.exists(filename):
             model = pickle.load(open(filename, 'rb'))
         else:
-            print('Training model...')
             model = Transformer(
                 n_steps=seqLen,
                 n_features=X.shape[2],
@@ -35,7 +37,6 @@ class PyPotsTransformer(Imputation):
             )
             model.fit(dataset)
             # Salvar modelo
-            filename = './model/transformer_model.sav'
             pickle.dump(model, open(filename, 'wb'))
 
         XImputed = model.impute(dataset)
@@ -54,7 +55,7 @@ class PyPotsTransformer(Imputation):
 
         # Replace all rows with imputed sensor values
         dfImputed = df.copy()
-        dfImputed[featureCols] = imputedFull
+        dfImputed[column] = imputedFull[:, featureCols.index(column)]
 
         # print(f"Returned rows: {len(dfImputed)} (matches original rows, time preserved)")
 

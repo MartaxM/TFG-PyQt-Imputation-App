@@ -3,60 +3,58 @@ import pandas as pd
 import time
 import os
 from pathlib import Path
-from model.strategy.average import Average
-from model.strategy.backward_fill import BackwardFill
-from model.strategy.forward_fill import ForwardFill
-from model.strategy.median import Median
-from model.strategy.pypots_saits import PyPotsSaits
-from model.strategy.pypots_transformer import PyPotsTransformer
 from model.tab_info import TabInfo
 from model.remove import *
 
 class DatasetList(QObject):
-    datasetChanged = pyqtSignal(str)
     datasetAdded = pyqtSignal(str)
-    datasetAddedToVisible = pyqtSignal(str)
-    datasetRemoved = pyqtSignal(str)
+    datasetVisilityChanged = pyqtSignal(str, bool)
+    clearResult = pyqtSignal(str)
+    datasetRemoved = pyqtSignal(str, list)
     datasetRenamed = pyqtSignal(str, dict)
     currentTabChanged = pyqtSignal(int)
     resultUpdated = pyqtSignal()
     imputationChanged = pyqtSignal(str)
     imputationVisible = pyqtSignal(str, bool)
 
-    def __init__(self):
+    def __init__(self, imputationMethods, variables = None, alwaysVisibleVariables = None):
         super().__init__()
-        self.variables = ['SDS_P1', 'SDS_P2']
+        self.__variables = variables or ['SDS_P1', 'SDS_P2']
+        self.__alwaysVisibleVariables = alwaysVisibleVariables or ['lat', 'long']
         # diccionario {label : df}
-        self.datasets = {}
-        self.tabs = []
-        self.imputationMethods =  {
-            'Average' : Average(), 
-            'Backward Fill' : BackwardFill(), 
-            'Forward Fill' : ForwardFill(), 
-            'Median' : Median(),
-            'PyPots SAITS' : PyPotsSaits(),
-            'PyPots Transformer' : PyPotsTransformer()
-        }
-        self.imputationSelection = {
-            self.variables[0] : {
-                'visible': False,
-                'selection':'Average'
-            },
-            self.variables[1] : {
-                'visible': False,
-                'selection':'Average'
-            },
-            'lat' : {
-                'visible': True,
-                'selection':'Average'
-            },
-            'long' : {
-                'visible': True,
-                'selection':'Average'
-            }
-        }
-        self.currentTab = None
+        self.__datasets = {}
+        self.__tabs = []
+        self.__imputationMethods = imputationMethods
 
+        self.__currentTab = None
+
+    @property
+    def variables(self):
+        return self.__variables
+    
+    @property
+    def alwaysVisibleVariables(self):
+        return self.__variables
+
+    @property
+    def datasets(self):
+        return self.__datasets
+    
+    def getDataset(self, label):
+        return self.__datasets.get(label)
+    
+    @property
+    def tabs(self):
+        return self.__tabs
+    
+    @property
+    def imputationMethods(self):
+        return self.__imputationMethods
+    
+    @property
+    def currentTab(self):
+        return self.__currentTab
+    
     def addDataset(self,label, df):
         """
         Add dataset to list
@@ -65,9 +63,15 @@ class DatasetList(QObject):
             label (str): First number.
             df (pandas.DataFrame): Second number.
         """
-        safeName = self.tryName(label)
-        self.datasets.update({safeName : df})
-        self.datasetAdded.emit(safeName)
+        valid = True
+        for var in self.__alwaysVisibleVariables:
+            if var not in df.columns:
+                valid = False
+        if valid:
+            safeName = self.tryName(label)
+            self.__datasets.update({safeName : df})
+            self.datasetAdded.emit(safeName)
+        return
 
     def renameDataset(self, oldLabel, newLabel):
         """
@@ -81,35 +85,36 @@ class DatasetList(QObject):
             bool: Success of the operation.
         """
         if newLabel and oldLabel != newLabel:
-            df = self.datasets.pop(oldLabel)
+            df = self.__datasets.pop(oldLabel)
             if not df.empty:
                 label = self.tryName(newLabel)
-                self.datasets.update({label : df})
+                self.__datasets.update({label : df})
                 renamePairs = {oldLabel:label}
-                self.renameDatasetsInTabs()
+                self.renameDatasetsInTabs(oldLabel, label)
                 self.datasetRenamed.emit(oldLabel, renamePairs)
                 return True
         else:
             return False
 
-    def renameDatasetsInTabs(self):
-        """Rename Dataset in visible in tabs"""
-        pass
-        
+    def renameDatasetsInTabs(self, oldLabel, newLabel):
+        """Rename Dataset in visible in __tabs"""
+        for tab in self.__tabs:
+            tab.replaceVisible(oldLabel, newLabel)
 
     def convertCurrent(self):
         """Create dataset from current imputation results and add it to list."""
-        current = self.currentTab.results
-        if current and self.currentTab.type != 'Analysis':
+        current = self.__currentTab.results
+        if current and self.__currentTab.getVisibleImputationVariables and self.__currentTab.type != 'Analysis':
             merged = pd.DataFrame()
             labelAddOns = []
-            for key in self.variables:
+            for key in self.__variables:
                 value = current.get(key)
-                if key in current.keys() and self.imputationSelection[key]['visible']:
+                imputationSelection = self.currentTab.getImputationSelection(key)
+                if key in current.keys() and imputationSelection:
                     labelAddOns.append(key)
-                    labelAddOns.append(self.imputationSelection[key]['selection'])
+                    labelAddOns.append(imputationSelection)
                     merged = merged.combine_first(value)
-            baseName = self.currentTab.selection
+            baseName = self.__currentTab.selection
             label = self.genName(baseName, labelAddOns)
             self.addDataset(label, merged)
 
@@ -123,18 +128,18 @@ class DatasetList(QObject):
         Returns:
             bool: Success of removal.
         """
-        if label in self.datasets:
-            self.datasets.pop(label)
-            self.datasetRemoved.emit(label)
-            if label == self.currentTab.selection:
-                self._clearWorking()
+        if label in self.__datasets:
+            columns = list(self.__datasets.pop(label).columns)            
+            for tab in self.tabs:
+                tab.clearIfWorking(label)
+            self.datasetRemoved.emit(label, columns)
             return True
         else:
             return False
 
     def saveToCSV(self, labels, file):
         """
-        Export datasets as csv files.
+        Export __datasets as csv files.
 
         Args:
             labels (array<str>): Dataset list to export
@@ -145,14 +150,14 @@ class DatasetList(QObject):
             for label in labels:
                 name, ext = os.path.splitext(file)
                 newFile = f"{name}({counter}){ext}"
-                self.datasets[label].to_csv(newFile, index=False, parse_dates = ["time"])
+                self.__datasets[label].to_csv(newFile, index=False, parse_dates = ["time"])
                 counter+=1
         else:
-            self.datasets[label[0]].to_csv(file, index=False)
+            self.__datasets[label[0]].to_csv(file, index=False)
     
     def saveFuseToCSV(self, labels, file):
         """
-        Export datasets fused as one csv files.
+        Export __datasets fused as one csv files.
 
         Args:
             labels (array<str>): Dataset list to export
@@ -160,7 +165,7 @@ class DatasetList(QObject):
         """
         frames = []
         for label in labels:
-            frames.append(self.datasets[label])
+            frames.append(self.__datasets[label])
         combined = pd.concat(frames)
         combined= combined.drop_duplicates()
         combined = combined.reset_index(drop=True)
@@ -174,7 +179,6 @@ class DatasetList(QObject):
             file (str): File name.
         """
         frame = pd.read_csv(file)
-        frame['imputated'] = False
         label = Path(file).stem
         self.addDataset(label, frame)
 
@@ -191,7 +195,6 @@ class DatasetList(QObject):
         combined = pd.concat(frames)
         combined= combined.drop_duplicates()
         combined = combined.reset_index(drop=True)
-        combined['imputated'] = False
         label = "Combined" + str(time.time())
         self.addDataset(label, combined)
 
@@ -205,14 +208,20 @@ class DatasetList(QObject):
         Returns:
             bool: Sucess of operation.
         """
-        if column in self.variables and self.currentTab.selection:
-            imputationMetod = self.imputationMethods.get(self.imputationSelection[column]['selection'])
+        selection = self.__currentTab.selection
+        imputationSelection = self.__currentTab.getImputationSelection(column)
+        if imputationSelection and selection:
+            imputationMetod = self.__imputationMethods.get(imputationSelection)
             if imputationMetod:
-                df = self.datasets[self.currentTab.selection]
-                fullIndex = range( 0, df.index.max() + 1)
-                df = df.reindex(fullIndex)
-                result = imputationMetod.impute(df, column)
-                self.currentTab.results.update({column:result})
+                try:
+                    df = self.__datasets[selection]
+                except:
+                    return False
+                if column in df.columns:
+                    result = imputationMetod.impute(df, column,{'label': selection})
+                else:
+                    return False
+                self.__currentTab.results.update({column:result})
                 return True
             else: 
                 return False
@@ -228,8 +237,8 @@ class DatasetList(QObject):
             label (str): Label of the DataFrame affected.
             value (int): Percentage of removal.
         """
-        if label in self.datasets:
-            df = self.datasets[label]
+        if label in self.__datasets:
+            df = self.__datasets[label]
             result = removePercentage(df,value)
             labelAddOns = ['rmPercent']
             name = self.genName(label, labelAddOns)
@@ -246,8 +255,8 @@ class DatasetList(QObject):
             start (pandas.Timestampt): Start of the interval.
             end (pandas.Timestampt): End of the interval.
         """
-        if label in self.datasets:
-            df = self.datasets[label]
+        if label in self.__datasets:
+            df = self.__datasets[label]
             if inverted:
                 result = removeOutsideInterval(df,start,end)
             else:
@@ -265,12 +274,12 @@ class DatasetList(QObject):
             var (str, optional): Variable to which the results are related. Defaults to None.
         """
         if not var:
-            for var in self.currentTab.results.keys():
-                self.datasetRemoved.emit(var)
-            self.currentTab.results.clear()
+            for var in self.__currentTab.results.keys():
+                self.clearResult.emit(var)
+            self.__currentTab.results.clear()
         else:
-            if var in self.currentTab.results.keys():
-                self.datasetRemoved.emit(var)
+            if var in self.__currentTab.results.keys():
+                self.clearResult.emit(var)
 
 
     def setCurrent(self, labelText):
@@ -280,25 +289,25 @@ class DatasetList(QObject):
         Args:
             labelText (str): Dataset label
         """
-        if self.currentTab.selection != labelText:
-            self.currentTab.addSelection(labelText)
+        if labelText and self.__currentTab.selection != labelText:
+            self.__currentTab.selection = labelText
             self._clearWorking()
-            if self.currentTab.type == 'AnalysisTab':
+            if self.__currentTab.type == 'AnalysisTab':
                 self.compare()
             else:
-                for var, obj in self.imputationSelection.items():
-                    if obj['visible']:
-                        self.impute(var)
-                results = self.currentTab.results
-                lat = results.get('lat')
-                long = results.get('long')
-                if lat and long:
-                    for var, obj in self.imputationSelection.items():
-                        if obj['visible']:
-                            for dsd in self.variables:
-                                if dsd in results:
-                                    self.currentTab.results[dsd]['lat'] = lat['lat']
-                                    self.currentTab.results[dsd]['long'] = long['long']
+                for var in self.__variables:
+                    if self.__currentTab.getImputationSelection(var):
+                        if self.impute(var):
+                            lat = self.__currentTab.results.get('lat')
+                            long = self.__currentTab.results.get('long')
+                            if lat is None:
+                                self.impute('lat')
+                                lat = self.__currentTab.results.get('lat')
+                            if long is None:
+                                self.impute('long')
+                                long = self.__currentTab.results.get('long')
+                            self.__currentTab.results[var]['lat'] = lat['lat']
+                            self.__currentTab.results[var]['long'] = long['long']
             self.resultUpdated.emit()
 
     def changeImputationSelection(self, variable, selectedMethod):
@@ -309,18 +318,18 @@ class DatasetList(QObject):
             variable (str): Variable name.
             selectedMethod (str): Imputation method label
         """
-        if selectedMethod in self.imputationMethods and variable in self.variables:
-            if self.imputationSelection[variable]['selection'] != selectedMethod:
-                self.imputationSelection[variable].update({'selection':selectedMethod})
-                if self.currentTab.selection and self.imputationSelection[variable]['visible']:
+        
+        if selectedMethod in self.__imputationMethods and variable in self.__variables:
+            if self.__currentTab.changeImputationMethod(variable, selectedMethod):
+                if self.__currentTab.selection and self.__currentTab.getImputationSelection(variable):
                     self._clearWorking(variable)
                     self.impute(variable)
                     if variable == 'lat' or variable == 'long':
-                        coor = self.currentTab.results.get(variable)
+                        coor = self.__currentTab.results.get(variable)
                         if coor:
-                            for dsd in self.variables:
-                                if dsd in self.currentTab.results:
-                                    self.currentTab.results[dsd][variable] = coor['df'][variable]
+                            for dsd in self.__variables:
+                                if dsd in self.__currentTab.results:
+                                    self.__currentTab.results[dsd][variable] = coor[variable]
                             self.resultUpdated.emit()
                     else:
                         self.imputationChanged.emit(variable)
@@ -333,18 +342,18 @@ class DatasetList(QObject):
             variable (str): Variable name.
             checked (bool): New visibility value.
         """
-        if variable in self.imputationSelection:
-            self.imputationSelection[variable].update({'visible':checked})
-            if self.currentTab.selection and checked:
+        if variable in self.__variables:
+            self.__currentTab.changeImputationVisibility(variable, checked)
+            if self.__currentTab.selection and checked:
                 self._clearWorking(variable)
-                self.impute(variable)
-                lat = self.currentTab.results.get('lat')
-                long = self.currentTab.results.get('long')
-                if lat and long:
-                    for dsd in self.variables:
-                        if dsd in self.currentTab.results:
-                            self.currentTab.results[dsd]['df']['lat'] = lat['df']['lat']
-                            self.currentTab.results[dsd]['df']['long'] = long['df']['long']
+                if self.impute(variable):
+                    lat = self.__currentTab.results.get('lat')
+                    long = self.__currentTab.results.get('long')
+                    if not lat is None and not long is None:
+                        for dsd in self.__variables:
+                            if dsd in self.__currentTab.results:
+                                self.__currentTab.results[dsd]['lat'] = lat['lat']
+                                self.__currentTab.results[dsd]['long'] = long['long']
             self.imputationVisible.emit(variable, checked)
 
     def changeDatasetVisiblity(self, label, checked):
@@ -355,39 +364,41 @@ class DatasetList(QObject):
             label (str): Dataset label.
             checked (str): New visibility status.
         """
-        if label not in self.currentTab.visible and checked:
-            self.currentTab.visible.append(label)
-            self.datasetAddedToVisible.emit(label)
-        elif label in self.currentTab.visible and not checked:
-            self.currentTab.visible.remove(label)
-            self.datasetRemoved.emit(label)
+        if label not in self.__currentTab.visible and checked:
+            self.__currentTab.visible.append(label)
+        elif label in self.__currentTab.visible and not checked:
+            self.__currentTab.visible.remove(label)
+        self.datasetVisilityChanged.emit(label, checked)
 
     def addTab(self, tabName, className, maxSelection = 1):
         """
-        Adds tab to tabs.
+        Adds tab to __tabs.
 
         Args:
             tabName (str): Tab title.
             className (str): Class name of the tab to add.
         """
-        tab = TabInfo(className, title=tabName, maxSelection=maxSelection)
-        self.tabs.append(tab)
-        self.changeTab(len(self.tabs)-1)
+        tab = TabInfo(className, self.__variables + self.__alwaysVisibleVariables, next(iter(self.__imputationMethods), None), 
+                      title=tabName, maxSelection=maxSelection)
+        for var in self.__alwaysVisibleVariables:
+            tab.changeImputationVisibility(var, True)
+        self.__tabs.append(tab)
+        self.changeTab(len(self.__tabs)-1)
         return
     
     def removeTab(self, tabIndex):
         """
-        Remove tab from tabs and change current tab.
+        Remove tab from __tabs and change current tab.
 
         Args:
             tabIndex (int): Tab index.
         """
-        tab = self.tabs.pop(tabIndex)
-        if tab == self.currentTab:
-            if self.tabs:
-                self.currentTab = self.tabs[-1]
+        tab = self.__tabs.pop(tabIndex)
+        if tab == self.__currentTab:
+            if self.__tabs:
+                self.__currentTab = self.__tabs[-1]
             else:
-                self.currentTab = None
+                self.__currentTab = None
         return
 
     def renameTab(self, index, newName):
@@ -398,7 +409,7 @@ class DatasetList(QObject):
             index (int): Tab index.
             newName (str): New name.
         """
-        self.tabs[index]['label'] = newName
+        self.__tabs[index].title = newName
         return
 
     def compare(self):
@@ -408,22 +419,22 @@ class DatasetList(QObject):
         Returns:
             bool: Success of operation.
         """
-        selection = self.currentTab.selection
-        if selection:
-            predicted = self.datasets[selection[0]]
-            actual = self.datasets[selection[1]]
-            if selection[0] != selection[1]:
-                for var in self.variables:
+        selection = self.__currentTab.selection
+        if selection and len(selection) > 1:
+            predicted = self.__datasets[selection[0]]
+            actual = self.__datasets[selection[1]]
+            if not selection[0] == selection[1]:
+                for var in self.__variables:
                     if var in predicted and var in actual:
                         rmse = self.rootMeanSquaredError(predicted, actual, var)
-                        self.currentTab.results.update({var: rmse})
+                        self.__currentTab.results.update({var: rmse})
                 return True
         else:
             return False
     
     def rootMeanSquaredError(self, predicted, actual, col):
         """
-        Calculate RMSE between datasets.
+        Calculate RMSE between __datasets.
 
         Args:
             predicted (pandas.DataFrame): Expeted DataFrame.
@@ -444,11 +455,13 @@ class DatasetList(QObject):
         Args:
             index (int): Tab index.
         """
-        if index > len(self.tabs) or index < 0:
-            self.currentTab = None
-        else:
-            self.currentTab = self.tabs[index]
-            self.currentTabChanged.emit(index)
+        if index > len(self.__tabs) or index < 0:
+            self.__currentTab = None
+            self.currentTabChanged.emit(-1)
+        elif len(self.__tabs) > 0:
+            if not self.__currentTab == self.__tabs[index]:
+                self.__currentTab = self.__tabs[index]
+                self.currentTabChanged.emit(index)
 
     def duplicateDataset(self, label):
         """
@@ -458,7 +471,7 @@ class DatasetList(QObject):
             label (str): Dataset label.
         """
         newLabel = self.genName(label, ["duplicate"])
-        newDf = self.datasets[label].copy()
+        newDf = self.__datasets[label].copy()
         self.addDataset(newLabel, newDf)
     
     def applyCorrection(self, label, substract, division):
@@ -470,10 +483,10 @@ class DatasetList(QObject):
             substract (float): Substract value.
             division (float): Dividend.
         """
-        if label in self.datasets:
-            df = self.datasets[label].copy()
-            df[self.variables[0]] = (df[self.variables[0]] - substract) / division
-            df[self.variables[1]] = (df[self.variables[1]] - substract) / division
+        if label in self.__datasets:
+            df = self.__datasets[label].copy()
+            df[self.__variables[0]] = (df[self.__variables[0]] - substract) / division
+            df[self.__variables[1]] = (df[self.__variables[1]] - substract) / division
             newLabel = self.genName(label, ["corrected"])
             self.addDataset(newLabel, df)
 
@@ -484,7 +497,14 @@ class DatasetList(QObject):
         Returns:
             dict<str, pandas.DataFrame>: Current imputation results.
         """
-        return self.currentTab.results.copy()
+        copy = self.__currentTab.results.copy()
+        variables = self.__currentTab.results.keys()
+        results = {}
+        for val in variables:
+            if val in self.__variables:
+                results.update({val: copy[val]})
+
+        return results
     
     def getVarResult(self, var):
         """
@@ -496,7 +516,7 @@ class DatasetList(QObject):
         Returns:
             pandas.DataFrame: Current imputation results.
         """
-        return self.currentTab.results[var]
+        return self.__currentTab.results.get(var, None)
 
     def genName(self, base, addOns):
         """Generate new dataset label.
@@ -522,8 +542,8 @@ class DatasetList(QObject):
         Returns:
             str: Valid dataset name.
         """
-        checklist = list(self.datasets.keys())
-        checklist = checklist + self.variables
+        checklist = list(self.__datasets.keys())
+        checklist = checklist + self.__variables
         counter = 0
         newname = name
         while newname in checklist:

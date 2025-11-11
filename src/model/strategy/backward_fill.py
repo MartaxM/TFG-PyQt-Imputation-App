@@ -3,8 +3,7 @@ import numpy as np
 
 class BackwardFill(Imputation):
 
-    def impute(self, df, column):
-        # Reindexear es una cosa que deberiamos hacer fuera de aquí
+    def impute(self, df, column, args = None):
         # Creamos array de valores correctos
         valid = df.copy()
         valid = valid.dropna(subset = [column])
@@ -21,7 +20,6 @@ class BackwardFill(Imputation):
             # Si el valor de la fila en la columna indicada es NaN se llena con el siguiente valor
             if np.isnan(result.at[index, column]):
                 result.at[index, column] = nextValid[column]
-                result.at[index, 'imputated'] = True
             # Si no, se entiende que es un valor válido, por tanto movemos el indice del siguiente valor que se usa para rellenar
             else:
                 nextValidInx += 1

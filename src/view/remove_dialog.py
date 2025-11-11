@@ -9,57 +9,57 @@ class RemoveDialog(QDialog):
         self.setWindowTitle("Options Dialog")
         self.resize(400, 300)
 
-        self.selection = {}
+        self.__selection = {}
 
-        self.listWidget = QListWidget()
-        self.listWidget.setFixedWidth(150)
-        self.listWidget.addItems(["Random Percent", "Interval"])
-        self.listWidget.itemSelectionChanged.connect(self.onSelectionChanged)
+        self.__listWidget = QListWidget()
+        self.__listWidget.setFixedWidth(150)
+        self.__listWidget.addItems(["Random Percent", "Interval"])
+        self.__listWidget.itemSelectionChanged.connect(self.__onSelectionChanged)
 
         stack = QStackedWidget()
-        stack.addWidget(self.randomWidget())
-        stack.addWidget(self.intervalWidget(df, datetimeCol))
+        stack.addWidget(self.__randomWidget())
+        stack.addWidget(self.__intervalWidget(df, datetimeCol))
 
         layout = QHBoxLayout()
-        layout.addWidget(self.listWidget)
+        layout.addWidget(self.__listWidget)
         layout.addWidget(stack)
         self.setLayout(layout)
 
-        self.listWidget.currentRowChanged.connect(stack.setCurrentIndex)
-        self.listWidget.setCurrentRow(0)  # Select first by default
+        self.__listWidget.currentRowChanged.connect(stack.setCurrentIndex)
+        self.__listWidget.setCurrentRow(0)  # Select first by default
 
         
-    def onSelectionChanged(self):
-        selectedIndexes = self.listWidget.selectedIndexes()
+    def __onSelectionChanged(self):
+        selectedIndexes = self.__listWidget.selectedIndexes()
         if selectedIndexes:
             index = selectedIndexes[0].row()  # get row index of first selected item
             if index == 0:
-                self.selection.update({'mode': 'percent'})
+                self.__selection.update({'mode': 'percent'})
             elif index == 1:
-                self.selection.update({'mode': 'interval'})
+                self.__selection.update({'mode': 'interval'})
             elif index == 1:
-                self.selection.update({'mode': 'values'})
+                self.__selection.update({'mode': 'values'})
         else:
-            self.selection['mode'] = 'undefined'
+            self.__selection['mode'] = 'undefined'
 
-    def randomWidget(self):
+    def __randomWidget(self):
         widget = QWidget()
         layout = QVBoxLayout()
         removeBtn = QPushButton("Remove data", self)
         removeBtn.clicked.connect(self.savePercentRemoveInput)
-        self.removePercentageInput = QLineEdit()
+        self.__removePercentageInput = QLineEdit()
         intValidator = QIntValidator()
         intValidator.setRange(1,99)
-        self.removePercentageInput.setValidator(intValidator)
-        self.removePercentageInput.setPlaceholderText("Percent 1-99")
-        layout.addWidget(self.removePercentageInput)
+        self.__removePercentageInput.setValidator(intValidator)
+        self.__removePercentageInput.setPlaceholderText("Percent 1-99")
+        layout.addWidget(self.__removePercentageInput)
         layout.addStretch()
         layout.addWidget(removeBtn, alignment=Qt.AlignRight)
     
         widget.setLayout(layout)
         return widget
 
-    def intervalWidget(self, df, datetimeCol):
+    def __intervalWidget(self, df, datetimeCol):
         widget = QWidget()
         layout = QVBoxLayout()
         removeBtn = QPushButton("Remove data", self)
@@ -75,23 +75,23 @@ class RemoveDialog(QDialog):
         endQdt = QDateTime(lastTs.year, lastTs.month, lastTs.day,
                             lastTs.hour, lastTs.minute, lastTs.second)
         # Starting date/time
-        self.startDatetime = QDateTimeEdit(self)
-        self.startDatetime.setCalendarPopup(True)
-        self.startDatetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self.startDatetime.setDateTime(startQdt)
+        self.__startDatetime = QDateTimeEdit(self)
+        self.__startDatetime.setCalendarPopup(True)
+        self.__startDatetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.__startDatetime.setDateTime(startQdt)
 
         # Ending date/time
-        self.endDatetime = QDateTimeEdit(self)
-        self.endDatetime.setCalendarPopup(True)
-        self.endDatetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self.endDatetime.setDateTime(endQdt)
+        self.__endDatetime = QDateTimeEdit(self)
+        self.__endDatetime.setCalendarPopup(True)
+        self.__endDatetime.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.__endDatetime.setDateTime(endQdt)
 
-        self.invertedCheckbox = QCheckBox("Values inside the selection will be kept", self)
-        self.invertedCheckbox.setChecked(True)
+        self.__invertedCheckbox = QCheckBox("Values inside the selection will be kept", self)
+        self.__invertedCheckbox.setChecked(True)
 
-        layout.addWidget(self.startDatetime)
-        layout.addWidget(self.endDatetime)
-        layout.addWidget(self.invertedCheckbox)
+        layout.addWidget(self.__startDatetime)
+        layout.addWidget(self.__endDatetime)
+        layout.addWidget(self.__invertedCheckbox)
         layout.addStretch()
         layout.addWidget(removeBtn, alignment=Qt.AlignRight)
     
@@ -106,29 +106,29 @@ class RemoveDialog(QDialog):
         return widget
     
     def savePercentRemoveInput(self):
-        rp = self.removePercentageInput.text()
+        rp = self.__removePercentageInput.text()
         if not rp:
             self.reject()
         else:
-            self.selection.update({'mode': 'percent'})
-            self.selection.update({'value':  int(rp)/100})
+            self.__selection.update({'mode': 'percent'})
+            self.__selection.update({'value':  int(rp)/100})
             self.accept()
 
     def saveIntervalRemoveInput(self):
-        startDatetime = self.startDatetime.dateTime().toPyDateTime()
-        endDatetime = self.endDatetime.dateTime().toPyDateTime()
+        startDatetime = self.__startDatetime.dateTime().toPyDateTime()
+        endDatetime = self.__endDatetime.dateTime().toPyDateTime()
         startTimestamp = pd.Timestamp(startDatetime)
         endTimestamp = pd.Timestamp(endDatetime)
-        inverted = self.invertedCheckbox.isChecked()
+        inverted = self.__invertedCheckbox.isChecked()
         
         if not startTimestamp or not endTimestamp:
             self.reject()
         else:
-            self.selection.update({'mode': 'interval'})
-            self.selection.update({'inverted': inverted})
-            self.selection.update({'start': startTimestamp})
-            self.selection.update({'end': endTimestamp})
+            self.__selection.update({'mode': 'interval'})
+            self.__selection.update({'inverted': inverted})
+            self.__selection.update({'start': startTimestamp})
+            self.__selection.update({'end': endTimestamp})
             self.accept()
 
     def getSelection(self):
-        return self.selection
+        return self.__selection

@@ -4,19 +4,32 @@ import pandas as pd
 
 class Median(Imputation):
 
-    def impute(self, df, column):
-        # Reindexear es una cosa que deberiamos hacer fuera de aquí
+    def impute(self, df, column, args = None):
         # Creamos array de valores correctos
         valid = df.copy()
         valid = valid.dropna(subset = [column])
-        valid= valid.reset_index()
-        # Reindexear para completar valores faltantes
+        valid = valid.reset_index()
+        
+        window = None
         validLength = len(valid)
         result = df.copy()
+        if validLength < 4:
+            window = valid
+        else:
+            window = valid.head(4)
 
-        median = valid[column].median()
-        result[column] = result[column].fillna(value=median)
-        
+        median = window[column].median()
+        nextValidInx = 4
+
+        for index, row in df.iterrows():
+            if np.isnan(result.at[index, column]):
+                result.at[index, column] = median
+            else:
+                window = window.drop(window.index[0])
+                if nextValidInx < len(df):
+                    window = pd.concat([window, df.loc[[nextValidInx]]], ignore_index=True)
+                    nextValidInx += 1
+
         return result
     
     @property

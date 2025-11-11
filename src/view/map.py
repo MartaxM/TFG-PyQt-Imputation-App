@@ -3,6 +3,7 @@ import folium # pip install folium
 from PyQt5.QtWebEngineWidgets import QWebEngineView # pip install PyQtWebEngine
 from PyQt5.QtWidgets import QSizePolicy
 from view.tab_widget_base import TabWidgetBase
+import re
 
 class Map(QWebEngineView, TabWidgetBase):
     def __init__(self, 
@@ -11,165 +12,136 @@ class Map(QWebEngineView, TabWidgetBase):
                  zoom = 15):
         super().__init__()
         # Variables
-        self.title = title
-        self.centralCoors = coordinates
-        self.zoom = zoom
-        self.layers = {}
-        self.map = self.getNewMap()
+        self.__title = title
+        self.__centralCoors = coordinates
+        self.__zoom = zoom
+        self.__layers = {}
+        self.__map = self.__getNewMap()
         # save map data to data object
         data = io.BytesIO()
-        self.map.save(data, close_file=False)
+        self.__map.save(data, close_file=False)
         self.setHtml(data.getvalue().decode())
         
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
     
-    def addLayer(self, label, df, column):
-        if label in self.layers.keys():
-            self.layers.pop(label)
+    def addLayer(self, label, df, columns):
+        if label in self.__layers.keys():
+            self.__layers.pop(label)
         layer = folium.FeatureGroup(name=label)
-        layer.add_to(self.map)
-        self.addMarkers(df, layer, label)
-        self.layers.update({label:layer})
-        data = io.BytesIO()
-        self.map.save(data, close_file=False)
-        self.setHtml(data.getvalue().decode())
+        layer.add_to(self.__map)
+        self.addMarkers(df, layer, label, columns)
+        self.__layers.update({label:layer})
+        self.reload()
         return
 
-    def removeLayer(self, label, column = False):
-        if label in self.layers.keys():
-            self.layers.pop(label)
-            self.map = self.getNewMap()
-            for layer in self.layers.values():
-                layer.add_to(self.map)
+    def removeLayer(self, label, columns = None):
+        if label in self.__layers.keys():
+            self.__layers.pop(label)
+            self.__map = self.__getNewMap()
+            for layer in self.__layers.values():
+                layer.add_to(self.__map)
 
             data = io.BytesIO()
-            self.map.save(data, close_file=False)
+            self.__map.save(data, close_file=False)
             self.setHtml(data.getvalue().decode())
         return
     
-    def renameLayers(self, renamePairs, df):
-        for old, new in renamePairs.items():
-            if old in self.layers.keys():
-                self.layers.pop(old)
-                layer = folium.FeatureGroup(name=new)
-                layer.add_to(self.map)
-                self.addMarkers(df[old], layer, new)
-                self.layers.update({new:layer})
+    def renameLayers(self, renamePairs, args = None):
+        df = args.get('df')
+        columns = args.get('columns')
+        if df and columns:
+            for old, new in renamePairs.items():
+                if old in self.__layers.keys():
+                    self.__layers.pop(old)
+                    layer = folium.FeatureGroup(name=new)
+                    layer.add_to(self.__map)
+                    self.addMarkers(df[old], layer, new, columns)
+                    self.__layers.update({new:layer})
         
         data = io.BytesIO()
-        self.map.save(data, close_file=False)
+        self.__map.save(data, close_file=False)
         self.setHtml(data.getvalue().decode())
 
-    def setCentralCoor(self, coordinates):
-        self.centralCoors = coordinates
-
-    def setTitle(self, title):
-        self.title = title
-
-    def setZoom(self, zoom):
-        self.zoom = zoom
-
-    def getNewMap(self):
+    def __getNewMap(self):
         return folium.Map(
-            title = self.title ,
-        	zoom_start=self.zoom,
-        	location=self.centralCoors,
+            title = self.__title ,
+        	zoom_start=self.__zoom,
+        	location=self.__centralCoors,
             prefer_canvas=True,
         )
 
-    def reload(self ,df_list, label):
-        #self.addMarkers(df)
+    def reload(self):
+        bounds = []
+        for fg in self.__layers.values():
+            for child in fg._children.values():
+                if hasattr(child, 'location'):
+                    bounds.append(child.location)
+
+        if bounds:
+            self.__map.fit_bounds(bounds)
+
         data = io.BytesIO()
-        self.map.save(data, close_file=False)
-        # update webView
+        self.__map.save(data, close_file=False)
         self.setHtml(data.getvalue().decode())
 
-    def addMarker(self, row, parent, label):
+    def addMarker(self, row, parent, label, columns):
         popup = self.createPopup(row, label)
         
+        average = 0
+        lenth = 0
+        for col in columns:
+            value = row.get(col, None)
+            if value:
+                average += value
+                lenth += 1
+        if lenth != 0:
+            average = average / lenth
+
         c = '#43d9de'
-        if row['SDS_P1'] > 10.0:
+        if average > 35.4:
             c = '#ff0000'
-        elif row['SDS_P1'] < 5.0:
+        elif average < 12.0:
             c = '#70ff00'
         folium.CircleMarker(
             [row["lat"], row["long"]],
             fill_color = c, color = c ,
             radius=8, fill_opacity=0.7,
-            popup=popup
+            popup=popup,
+            lazy=True
             ).add_to(parent)
-        # folium.Marker(
-        #     [row["lat"], row["long"]],
-        #     fill_color = c, color = c ,
-        #     radius=8, fill_opacity=0.7,
-        #     popup=popup,
-        #     icon=folium.DivIcon(
-        #         icon_size=(150,36),
-        #         icon_anchor=(7,20),
-        #         html='<div style="font-size: 18pt; color : "'
-        #         + c
-        #         + '>' 
-        #         + str(row['SDS_P1'])
-        #         + '</div>',
-        #         )
-        #     ).add_to(self.map)
        
-
-    def addMarkers(self, df, parent, label):
-        df.apply(self.addMarker,axis=1,args=([parent, label]))
-        # for name, values in df.items():
-        #     print('{name}: {value}'.format(name=name, value=values[0]))
-        #popup = self.createPopup
+    def addMarkers(self, df, parent, label, columns):
+        df.apply(self.addMarker,axis=1,args=([parent, label, columns]))
 
     def createPopup(self, row, label):
-        html=f"""
+        html = f"""
             <h2> {str(row["lat"])  + ", " + str(row["long"])} </h2>
             <table>
                 <tr>
                     <th>From: </th>
                     <th>{label}</th>
                 </tr>
-                <tr>
-                    <th>time</th>
-                    <th>{row["time"]}</th>
-                </tr>
-                <tr>
-                    <th>sensorid</th>
-                    <th>{row["sensorid"]}</th>
-                </tr>
-                <tr>
-                    <th>software_version</th>
-                    <th>{row["software_version"]}</th>
-                </tr>
-                <tr>
-                    <th>SDS_P1</th>
-                    <th>{row["SDS_P1"]}</th>
-                </tr>
-                <tr>
-                    <th>SDS_P2</th>
-                    <th>{row["SDS_P2"]}</th>
-                </tr>
-                <tr>
-                    <th>BME280_temperature</th>
-                    <th>{row["BME280_temperature"]}</th>
-                </tr>
-                <tr>
-                    <th>BME280_pressure</th>
-                    <th>{row["BME280_pressure"]}</th>
-                </tr>
-                <tr>
-                    <th>BME280_humidity</th>
-                    <th>{row["BME280_humidity"]}</th>
-                </tr>
-            </table> 
             """
+        
+        for key, value in row.items():
+            html = html + f"""
+                    <tr>
+                        <th>{key}</th>
+                        <th>{value}</th>
+                    </tr>
+                """
+
+        html = html + f"""
+            </table>
+        """
+
         iframe = folium.IFrame(html=html, width=315, height=200)
         popup = folium.Popup(iframe, max_width=2650)
         return popup
         
     def updateViewResult(self, results):
         for dsd, obj in results.items():
-            self.addLayer(obj['label'],obj['df'],dsd)
+            self.addLayer(obj['label'],obj['df'],[dsd])
 
     
 

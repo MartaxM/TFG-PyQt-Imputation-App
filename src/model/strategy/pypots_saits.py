@@ -1,14 +1,17 @@
 from model.strategy.imputation import Imputation
 import numpy as np
-import pandas as pd
 from pypots.imputation import SAITS
 import os
 import pickle
 
 class PyPotsSaits(Imputation):
 
-    def impute(self, df, column):
-        filename = "./model/SAITS_model.sav"
+    def impute(self, df, column, args = None):
+        filename = "./saved_models/SAITS_"
+        if args:
+            filename = filename + args['label']
+        filename = filename + "_"+ column + "_model.sav"
+
         featureCols = ["SDS_P1", "SDS_P2", "BME280_temperature", "BME280_pressure", "BME280_humidity", "lat", "long"]
         dfFeatures = df[featureCols].copy()
         dataArray = dfFeatures.to_numpy()
@@ -32,8 +35,6 @@ class PyPotsSaits(Imputation):
                 d_v=64,
             )
             model.fit(dataset)
-            # Salvar modelo
-            filename = './model/SAITS_model.sav'
             pickle.dump(model, open(filename, 'wb'))
 
         XImputed = model.impute(dataset)

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class Imputation(ABC):
     @abstractmethod
-    def impute(self, df, column):
+    def impute(self, df, column, args = None):
         pass
 
     @property

@@ -3,19 +3,15 @@ from PyQt5.QtWidgets import QWidget
 
 class TabWidgetBase(QWidget):
     @abstractmethod
-    def addLayer(self, label, df, column = None):
+    def addLayer(self, label, df, columns = None):
         pass
 
     @abstractmethod
-    def removeLayer(self, label, column = None):
+    def removeLayer(self, label, columns = None):
         pass
 
     @abstractmethod
-    def reload(self, df_list, column = None):
-        pass
-
-    @abstractmethod
-    def renameLayers(self, renamePairs, df = None):
+    def renameLayers(self, renamePairs, args = None):
         pass
 
     @abstractmethod

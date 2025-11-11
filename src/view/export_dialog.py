@@ -15,23 +15,23 @@ class ExportDialog(QDialog):
         # GroupBox with multi-select list
         group_box = QGroupBox("Select Items")
         group_layout = QVBoxLayout()
-        self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QListWidget.MultiSelection)
+        self.__list_widget = QListWidget()
+        self.__list_widget.setSelectionMode(QListWidget.MultiSelection)
 
         for label in datasets:
             item = QListWidgetItem(label)
-            self.list_widget.addItem(item)
+            self.__list_widget.addItem(item)
 
-        group_layout.addWidget(self.list_widget)
+        group_layout.addWidget(self.__list_widget)
         group_box.setLayout(group_layout)
         main_layout.addWidget(group_box)
 
         # Radio buttons
-        self.oneFileOptionOption = QRadioButton("Export as one file")
-        self.multipleFilesOption = QRadioButton("Export as multiple files")
-        self.multipleFilesOption.setChecked(True)  # Default selection
-        main_layout.addWidget(self.oneFileOptionOption)
-        main_layout.addWidget(self.multipleFilesOption)
+        self.__oneFileOptionOption = QRadioButton("Export as one file")
+        self.__multipleFilesOption = QRadioButton("Export as multiple files")
+        self.__multipleFilesOption.setChecked(True)  # Default selection
+        main_layout.addWidget(self.__oneFileOptionOption)
+        main_layout.addWidget(self.__multipleFilesOption)
 
         # OK button
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -48,7 +48,7 @@ class ExportDialog(QDialog):
 
     def getSelection(self):
         selected_items = [
-            item.text() for item in self.list_widget.selectedItems()
+            item.text() for item in self.__list_widget.selectedItems()
         ]
-        selected_option = "One" if self.oneFileOptionOption.isChecked() else "Multiple"
+        selected_option = "One" if self.__oneFileOptionOption.isChecked() else "Multiple"
         return selected_items, selected_option

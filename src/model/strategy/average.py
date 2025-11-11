@@ -3,13 +3,11 @@ import numpy as np
 
 class Average(Imputation):
     
-    def impute(self, df, column):
-        # Reindexear es una cosa que deberiamos hacer fuera de aquí
+    def impute(self, df, column, args = None):
         # Creamos array de valores correctos
         valid = df.copy()
         valid = valid.dropna(subset = [column])
         valid= valid.reset_index()
-        # Reindexear para completar valores faltantes
         validLength = len(valid)
         result = df.copy()
 
@@ -30,7 +28,6 @@ class Average(Imputation):
             # Si el valor de la fila en la columna indicada es NaN se hace la media
             if np.isnan(result.at[index, column]):
                 result.at[index, column] = (preValid[column] + nextValid[column]) / 2
-                result.at[index, 'imputated'] = True
             # Si no, se entiende que es un valor válido, por tanto actualizamos los índices de valores válidos
             else:
                 preValid = nextValid

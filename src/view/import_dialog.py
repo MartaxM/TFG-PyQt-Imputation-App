@@ -19,12 +19,12 @@ class ImportDialog(QDialog):
 
         # Botones de selección
         
-        self.fuseOption = QRadioButton("Fuse as one dataset")
-        self.multipleOption = QRadioButton("Import as multiple datasets")
-        self.multipleOption.setChecked(True)  # Default checked
+        self.__fuseOption = QRadioButton("Fuse as one dataset")
+        self.__multipleOption = QRadioButton("Import as multiple datasets")
+        self.__multipleOption.setChecked(True)  # Default checked
 
-        layout.addWidget(self.fuseOption)
-        layout.addWidget(self.multipleOption)
+        layout.addWidget(self.__fuseOption)
+        layout.addWidget(self.__multipleOption)
         
         # OK Button
         button_box = QDialogButtonBox(QDialogButtonBox.Ok)
@@ -35,6 +35,6 @@ class ImportDialog(QDialog):
         
     def getSelection(self):
         return {
-            "fuse": self.fuseOption.isChecked(),
-            "multiple": self.multipleOption.isChecked()
+            "fuse": self.__fuseOption.isChecked(),
+            "multiple": self.__multipleOption.isChecked()
         }

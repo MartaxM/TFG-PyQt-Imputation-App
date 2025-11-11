@@ -1,9 +1,9 @@
-from PyQt5.QtWidgets import QListWidget,QListWidgetItem,QVBoxLayout, QGroupBox, QAbstractItemView
+from PyQt5.QtWidgets import QListWidget,QListWidgetItem,QVBoxLayout, QGroupBox, QAbstractItemView, QApplication
 from PyQt5.QtCore import pyqtSignal
 from view.dataset_list_item import DatasetListItem
 
 class DatasetPanel(QGroupBox):
-    visibilityChanged = pyqtSignal(str,bool)
+    datasetVisibilityChanged = pyqtSignal(str,bool)
     datasetRemoved = pyqtSignal(str, int)
     removeData = pyqtSignal(str)
     duplicateDataset = pyqtSignal(str)
@@ -19,25 +19,29 @@ class DatasetPanel(QGroupBox):
         #self.layout.addWidget(self.addBtn)
         self.setLayout(self.layout)
         self.dsList.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.dsList.itemSelectionChanged.connect(self.enforceSelection)
-        self.maxSelection = 1
-        self.analysisMode = False
+        self.dsList.itemSelectionChanged.connect(self.__enforceSelection)
+        self.__maxSelection = 1
+        self.__visibilityControllable = True
         
     def reloadList(self, list):
         self.dsList.clear()
         for label in list:
             self.addItem(label)
 
-    def deleteCallback(self, listItem):
+    def __deleteCallback(self, listItem):
         widget = self.dsList.itemWidget(listItem)
         listItemIndex = self.dsList.row(listItem)
-        self.datasetRemoved.emit(widget.label.text(), listItemIndex)
+        self.datasetRemoved.emit(widget.label, listItemIndex)
 
     def addItem(self, label):
         item = QListWidgetItem()
-        itemWidget = DatasetListItem(label, lambda li=item: self.deleteCallback(item), 
+        itemWidget = DatasetListItem(label, lambda li=item: self.__deleteCallback(item), 
                                      self.removeData, self.duplicateDataset, self.correctDataset, self.renameDataset)
-        itemWidget.visibilityChangedSignal.connect(self.visibilityChanged)
+        
+        if not self.__visibilityControllable:
+            itemWidget.visibilityControllable(False)
+            
+        itemWidget.visibilityChangedSignal.connect(self.datasetVisibilityChanged)
         # Set size hint
         item.setSizeHint(itemWidget.sizeHint())
         # Add QListWidgetItem into QListWidget
@@ -48,16 +52,16 @@ class DatasetPanel(QGroupBox):
         self.dsList.takeItem(listItemIndex)
     
     def renameItem(self, oldName, newName):
-        widget = self.findByLabel(oldName)
+        widget = self.__findBylabel(oldName)
         if widget:
             widget.rename(newName)
 
-    def findByLabel(self, label):
+    def __findBylabel(self, label):
         found = None
         for i in range(self.dsList.count()):
             item = self.dsList.item(i)
             widget = self.dsList.itemWidget(item)
-            if widget and widget.label.text() == label:
+            if widget and widget.label == label:
                 found = widget
                 break
         return found
@@ -66,27 +70,15 @@ class DatasetPanel(QGroupBox):
         current = self.dsList.currentItem()
         widget = self.dsList.itemWidget(current)
         return widget
-    
-    def setAnalysisMode(self, setBool):
-        self.analysisMode = setBool
-        if self.analysisMode:
-            self.maxSelection = 2
-            items = self.getAllWidgets()
-            for item in items:
-                item.visibleToggle.hide()
-        else:
-            self.maxSelection = 1
-            items = self.getAllWidgets()
-            for item in items:
-                item.visibleToggle.show()
-            self.enforceSelection()
 
-    def enforceSelection(self):
+    def __enforceSelection(self):
         selectedItems = self.dsList.selectedItems()
-        if len(selectedItems) > self.maxSelection:
-            # Deselect second selected item
+        
+        if len(selectedItems) > self.__maxSelection:
+            self.dsList.blockSignals(True)
             lastSelected = selectedItems[0]
             lastSelected.setSelected(False)
+            self.dsList.blockSignals(False)
 
     def getAllWidgets(self):
         result = []
@@ -104,28 +96,43 @@ class DatasetPanel(QGroupBox):
             result.append(self.dsList.itemWidget(item))
         return result
         
-    def setState(self, visible, current, analysisMode):
-        if self.analysisMode != analysisMode:
-            self.setAnalysisMode(analysisMode)
+    def setVisibilityControllable(self, controllable):
+        if not controllable == self.__visibilityControllable:
+            self.__visibilityControllable = controllable
+            items = self.getAllWidgets()
+            if controllable:    
+                for item in items:
+                    item.visibilityControllable(True)
+            else:
+                for item in items:
+                    item.visibilityControllable(False)
+
+    def setMaxSelection(self, maxSelection):
+        if not maxSelection == self.__maxSelection:
+            self.__maxSelection = maxSelection
+            if maxSelection == 0:
+                self.dsList.setSelectionMode(QAbstractItemView.NoSelection)
+            else:
+                self.dsList.setSelectionMode(QAbstractItemView.MultiSelection)
+                self.__enforceSelection()
+
+    def setState(self, visible, current, visibilityControllable, maxSelection):
+        self.setVisibilityControllable(visibilityControllable)
+        self.setMaxSelection(maxSelection)
         items = [self.dsList.item(i) for i in range(self.dsList.count())]
-        self.dsList.clearSelection()
-        if self.analysisMode:
-            for item in items:
+        self.dsList.blockSignals(True)
+        for item in items:
+            widget = self.dsList.itemWidget(item)
+            text = widget.label
+            if self.__visibilityControllable and text in visible:
+                widget.setVisibilityStatus(True)
+            else:
+                widget.setVisibilityStatus(False)
                 widget = self.dsList.itemWidget(item)
-                text = widget.label.text()
+                text = widget.label
                 if current and text in current:
                     item.setSelected(True)
                 else:
                     item.setSelected(False)
-        else:
-            for item in items:
-                widget = self.dsList.itemWidget(item)
-                text = widget.label.text() 
-                if visible and text in visible:
-                    widget.visibleToggle.setChecked(True)
-                else:
-                    widget.visibleToggle.setChecked(False)
-                if current and text == current:
-                    item.setSelected(True)
-                else:
-                    item.setSelected(False)
+        self.dsList.blockSignals(False)
+

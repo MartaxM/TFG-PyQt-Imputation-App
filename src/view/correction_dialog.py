@@ -1,5 +1,4 @@
 from PyQt5.QtWidgets import QVBoxLayout, QLabel, QLineEdit, QPushButton, QDialog
-from PyQt5.QtCore import *
 from PyQt5.QtGui import QDoubleValidator
 
 class CorrectionDialog(QDialog):
@@ -11,15 +10,15 @@ class CorrectionDialog(QDialog):
         self.layout = QVBoxLayout()
         self.layout.addWidget(QLabel("Real Value = (Measured Value - x) / y"))
 
-        self.substractInput = QLineEdit()
-        self.substractInput.setValidator(QDoubleValidator())
+        self.__substractInput = QLineEdit()
+        self.__substractInput.setValidator(QDoubleValidator())
         self.layout.addWidget(QLabel("Substract (x) : "))
-        self.layout.addWidget(self.substractInput)
+        self.layout.addWidget(self.__substractInput)
 
-        self.divisionInput = QLineEdit()
-        self.divisionInput.setValidator(QDoubleValidator())
+        self.__divisionInput = QLineEdit()
+        self.__divisionInput.setValidator(QDoubleValidator())
         self.layout.addWidget(QLabel("Divide by (y) : "))
-        self.layout.addWidget(self.divisionInput)
+        self.layout.addWidget(self.__divisionInput)
 
         okButton = QPushButton("Apply")
         okButton.clicked.connect(self.accept)
@@ -28,8 +27,8 @@ class CorrectionDialog(QDialog):
         self.setLayout(self.layout)
 
     def getOperands(self):
-        if not self.substractInput.text().strip() or not self.divisionInput.text().strip():
+        if not self.__substractInput.text().strip() or not self.__divisionInput.text().strip():
             return None, None
-        substract = float(self.substractInput.text())
-        division = float(self.divisionInput.text())
+        substract = float(self.__substractInput.text())
+        division = float(self.__divisionInput.text())
         return substract, division
